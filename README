@@ -1,0 +1,10 @@
+This will be a UCT-based approach to AI on Pokemon Showdown.
+
+At this point, this project is a stripped down version of Zarel's client found at:
+https://github.com/Zarel/Pokemon-Showdown-Client
+
+And some incorrect UCT frameworkings.
+
+I deeply apologize for the state of this code. When it is at least somewhat functional, I'll clean it up.
+
+In short, a strong simulator will be implemented using Pokemon Showdown (server) itself, and UCT will be fixed to take advantage of that.
