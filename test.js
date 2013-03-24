@@ -1,17 +1,22 @@
 //var Config = { server: 'sim.smogon.com', serverid: 'showdown' };
 var Config = { server: 'localhost', serverid: 'localhost' }
 
-var $ = require('jquery');
+require('sugar');
+$ = require('jquery');
 var sjsc = require('sockjs-client');
 var socket = sjsc.create("http://" + Config.server + ":8000");	
 var Battle = require('./battle.js').Battle;
-var ToolsMod = require('./Tools.js');
-var Tools = ToolsMod.Tools;
-var sanitize = ToolsMod.sanitize;
+Data = {}
+Tools = require('./Tools.js');
+sanitize = function(str, jsEscapeToo) {
+	str = (str?''+str:'');
+	str = str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+	if (jsEscapeToo) str = str.replace(/'/g, '\\\'');
+	return str;
+}
 
 var crypto = require('crypto');
-function randomInt()
-{
+function randomInt(){
 	var bytes = crypto.randomBytes(4);
 	var inter = bytes[0] + 
 		(bytes[1] << 8) + (bytes[2] << 16) + (bytes[3] << 24);
@@ -43,9 +48,9 @@ function selectTeam(i){
 		rooms.lobby.send('/utm ' + JSON.stringify(teams[i].team));
 	}
 	selectedTeam = i;
+	if (AI.setTeam) AI.setTeam(teams[i]);
 }
-function login(username, password)
-{
+function login(username, password){
 	var name = username;
 	$.post(actionphp, {
 		act: 'login',
@@ -119,18 +124,14 @@ function notify (data) {
 	}
 	logfunc(message);
 }
-function toId(text) {
+toId = function(text) {
 	text = text || '';
 	if (typeof text === 'number') text = ''+text;
 	if (typeof text !== 'string') return toId(text && text.id);
 	return text.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
-function toUserid(text) {
-	text = text || '';
-	if (typeof text === 'number') text = ''+text;
-	if (typeof text !== 'string') return ''; //???
-	return text.toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
+toUserid = toId;
+
 function emit(socket, type, data) {
 	//socket.emit(type, data);
 	if (typeof data === 'object') data.type = type;
@@ -489,8 +490,7 @@ function BattleRoom(id) {
 						move = {
 							name: moves[i].move,
 							id: moves[i].move,
-							type: ''
-						};
+							type: '' };
 					}
 					var name = move.name;
 					var pp = moveData.pp + '/' + moveData.maxpp;
@@ -502,8 +502,6 @@ function BattleRoom(id) {
 						controls += 'Disabled -- ';
 						hasDisabled = true;
 					} else {
-						move.myRoom = selfR.id;
-						move.run = function(){ rooms[this.myRoom].formUseMove(this.id); };
 						AIActions.push(move);
 						hasMoves = true;
 					}
@@ -528,15 +526,9 @@ function BattleRoom(id) {
 							controls += 'Disabled: ' +i + ': ' + sanitize(pokemon.name) + pokemon.hp +'/' + pokemon.maxhp +(pokemon.status?pokemon.status:'') + "\r\n";
 						} else {
 							controls += i + ': ' + sanitize(pokemon.name) + pokemon.hp +'/' + pokemon.maxhp +(pokemon.status?pokemon.status:'') + "\r\n";
-							AIActions.push(
-								{type:"switch",
+							AIActions.push( {type:"switch",
 								id: pokemon.species,
-								idx: i,
-								myRoom: selfR.id,
-								run: function(){
-									rooms[this.myRoom].formSwitch(this.idx);
-									}
-								});
+								idx: i});
 						}
 					}
 				}
@@ -566,15 +558,9 @@ function BattleRoom(id) {
 					controls += 'Disabled: ' + sanitize(pokemon.name) + ' (' + pokemon.hp+'/'+pokemon.maxhp + ')'+ " " +  pokemon.status + '\r\n';
 				} else {
 					controls += sanitize(pokemon.name) + ' (' + pokemon.hp+'/'+pokemon.maxhp + ')'+ " " +  pokemon.status + '\r\n';
-					AIActions.push(
-								{type:"switch",
+					AIActions.push( {type:"switch",
 								id: pokemon.species,
-								idx: i,
-								myRoom: selfR.id,
-								run: function(){
-									rooms[this.myRoom].formSwitch(this.idx);
-									}
-								});
+								idx: i});
 				}
 			}
 			logfunc(controls);
@@ -584,6 +570,7 @@ function BattleRoom(id) {
 			break;
 		case 'team':
 			var controls = '';
+			var AIActions = []
 			if (type !== 'team2') {
 				
 				selfR.teamPreviewChoice = [1,2,3,4,5,6].slice(0,switchables.length);
@@ -601,12 +588,15 @@ function BattleRoom(id) {
 					}
 					
 					controls += i + ': ' + sanitize(pokemon.name) + '\r\n';
+					AIActions.push( {type:"switch",
+								id: pokemon.species,
+								idx: i});
 				}
 				if (selfR.battle.teamPreviewCount) 
 					selfR.teamPreviewCount = parseInt(selfR.battle.teamPreviewCount,10);
 			} else {
-				controls += selfR.id + '\'].callback(null,\'team\')">Back</button> What about the rest of your team?</div>';
-				controls += '<div class="switchcontrols"><div class="switchselect"><button onclick="rooms[\'' + selfR.id + '\'].formSelectSwitch()">Choose a pokemon for slot '+(selfR.teamPreviewDone+1)+'</button></div><div class="switchmenu">';
+				controls += selfR.id + '\'].callback(null,\'team\')">Back</button> What about the rest of your team?\r\n';
+				controls += '<button onclick="rooms[\'' + selfR.id + '\'].formSelectSwitch()">Choose a pokemon for slot '+(selfR.teamPreviewDone+1)+'\r\n';
 				for (var i = 0; i < switchables.length; i++) {
 					var pokemon = switchables[selfR.teamPreviewChoice[i]-1];
 					if (i >= 6) {
@@ -615,34 +605,19 @@ function BattleRoom(id) {
 					if (i < selfR.teamPreviewDone) {
 					//	controls += '<button disabled="disabled"' + tooltipAttrs(i, 'sidepokemon') + '><span class="pokemonicon" style="display:inline-block;vertical-align:middle;'+Tools.getIcon(pokemon)+'"></span>' + sanitize(pokemon.name) + '</button> ';
 					} else {
-						controls += '<button onclick="rooms[\'' + selfR.id + '\'].formTeamPreviewSelect(' + i + ')"><span class="pokemonicon" style="display:inline-block;vertical-align:middle;"></span>' + sanitize(pokemon.name) + '</button> ';
+						controls += 'rooms[\'' + selfR.id + '\t' + i + ': ' + sanitize(pokemon.name) + '\r\n';
 					}
 				}
 			}
 			logfunc(controls);
-			//var r = parseInt(Math.random() * 6) % 6;
-			selfR.formTeamPreviewSelect(0);
+			
+			ChooseTeamPreview(AIActions, selfR, selfR.formTeamPreviewSelect);
 			selfR.notifying = true;
 			break;
 		}
 	};
 	this.formTeamPreviewSelect = function (pos) {
 		pos = parseInt(pos,10);
-		/*if (selfR.teamPreviewCount) {
-			var temp = selfR.teamPreviewChoice[pos];
-			selfR.teamPreviewChoice[pos] = selfR.teamPreviewChoice[selfR.teamPreviewDone];
-			selfR.teamPreviewChoice[selfR.teamPreviewDone] = temp;
-
-			selfR.teamPreviewDone++;
-
-			if (selfR.teamPreviewDone < Math.min(selfR.teamPreviewChoice.length, selfR.teamPreviewCount)) {
-				selfR.callback(selfR.battle, 'team2');
-				return false;
-			}
-			pos = selfR.teamPreviewChoice.join('');
-		} else {
-			pos = pos+1;
-		}*/
 		console.log("Selected: " + pos + ": ");
 		if (selfR.teamPreviewChoice)
 			console.log(JSON.stringify(selfR.teamPreviewChoice[pos]));
@@ -671,8 +646,6 @@ function BattleRoom(id) {
 		return false;
 	};
 	this.formRestart = function () {
-		/* 
-		selfR.send('/restart'); */
 		selfR.me.request = null;
 		selfR.battle.reset();
 		selfR.battle.play();
@@ -755,8 +728,7 @@ function BattleRoom(id) {
 		}
 
 		selfR.sendDecision('/team '+(pos));
-		selfR.notifying = false;
-		// updateRoomList();
+		selfR.notifying = false;		
 		return false;
 	};
 	this.formUndoDecision = function (pos) {
@@ -909,20 +881,16 @@ function Lobby(id) {
 
 		case 'showjoins':
 			rooms.lobby.add('Join/leave messages: ON');
-			Tools.prefs.set('showjoins', true, true);
 			return false;
 		case 'hidejoins':
 			rooms.lobby.add('Join/leave messages: HIDDEN');
-			Tools.prefs.set('showjoins', false, true);
 			return false;
 
 		case 'showbattles':
 			rooms.lobby.add('Battle messages: ON');
-			Tools.prefs.set('showbattles', true, true);
 			return false;
 		case 'hidebattles':
 			rooms.lobby.add('Battle messages: HIDDEN');
-			Tools.prefs.set('showbattles', false, true);
 			return false;
 
 		case 'timestamps':
@@ -934,7 +902,7 @@ function Lobby(id) {
 				rooms.lobby.add("Error: Valid options are /timestamps [all|lobby|pms], [minutes|seconds|off]");
 				return false;
 			}
-			var timestamps = Tools.prefs.get('timestamps') || {};
+			var timestamps = {};
 			if (typeof timestamps === 'string') {
 				// The previous has a timestamps preference from the previous
 				// regime. We can't set properties of a string, so set it to
@@ -954,7 +922,7 @@ function Lobby(id) {
 				break;
 			}
 			rooms.lobby.add('Timestamps preference set to: `' + targets[1] + '` for `' + targets[0] + '`.');
-			Tools.prefs.set('timestamps', timestamps, true);
+			//Tools.prefs.set('timestamps', timestamps, true);
 			return false;
 			
 		case 'highlight':
@@ -987,10 +955,10 @@ function Lobby(id) {
 					this.regex = new RegExp('\\b('+highlights.join('|')+')\\b', 'gi');
 					break;
 				}
-				Tools.prefs.set('highlights', highlights, true);
+				//Tools.prefs.set('highlights', highlights, true);
 			} else {
 				if (target === 'delete') {
-					Tools.prefs.set('highlights', false, true);
+					//Tools.prefs.set('highlights', false, true);
 					rooms.lobby.add("All highlights cleared");
 				} else if (target === 'show' || target === 'list') {
 					// Shows a list of the current highlighting words
@@ -1068,7 +1036,7 @@ function Lobby(id) {
 			var parts = target.split(',');
 			var avatar = parseInt(parts[0], 10);
 			if (avatar) {
-				Tools.prefs.set('avatar', avatar, true);
+				//Tools.prefs.set('avatar', avatar, true);
 			}
 			return text; // Send the /avatar command through to the server.
 
@@ -1090,7 +1058,7 @@ function Lobby(id) {
 		}
 	};
 	this.getTimestamp = function (section) {
-		var pref = Tools.prefs.get('timestamps') || {};
+		var pref = {};
 		var sectionPref = ((section === 'pms') ? pref.pms : pref.lobby) || 'off';
 		if ((sectionPref === 'off') || (sectionPref === undefined)) return '';
 		var date = new Date();
@@ -1103,7 +1071,7 @@ function Lobby(id) {
 			).join(':') + '] ';
 	};
 	this.getHighlight = function (message) {
-		var highlights = Tools.prefs.get('highlights') || [];
+		var highlights = [];
 		if (!this.regex) {
 			try {
 				this.regex = new RegExp('\\b('+highlights.join('|')+')\\b', 'gi');
@@ -1287,7 +1255,7 @@ function Lobby(id) {
 				});
 				if (selfR.rooms.length > 8) selfR.rooms.shift();
 
-				if (log[i].silent && !Tools.prefs.get('showbattles')) continue;
+				if (log[i].silent) continue;
 
 				selfR.joinLeaveElem = null;
 				selfR.joinLeave = {
@@ -1314,7 +1282,7 @@ function Lobby(id) {
 					me.users[toUserid(log[i].name)] = log[i].name;
 					continue;
 				}
-				if (log[i].silent && !Tools.prefs.get('showjoins')) continue;
+				if (log[i].silent) continue;
 				var message = '';
 				if (selfR.joinLeave['join'].length) {
 					var preList = selfR.joinLeave['join'];
@@ -1380,15 +1348,13 @@ function Lobby(id) {
 		if (data.log) {
 			// Disable timestamps for the past log because the server doesn't
 			// tell us what time the messages were sent at.
-			var timestamps = Tools.prefs.get('timestamps');
-			Tools.prefs.set('timestamps', 'off');
-			Tools.prefs.set('timestamps', timestamps);
+			var timestamps = {}
 		}
 		selfR.update(data);
 		
 		if (me.named) {
 			// Preferred avatar feature
-			var avatar = Tools.prefs.get('avatar');
+			var avatar = {};
 			if (avatar) {
 				// This will be compatible even with servers that don't support
 				// the second argument for /avatar yet.
@@ -2033,11 +1999,15 @@ function battleFinished(tab)
 function chooseMove(id, actions)
 {
 	if (rooms[id].kickTimer) clearTimeout(rooms[id].kickTimer);
-	rooms[id].kickTimer = setTimeout(rooms[id].formKickInactive, 120000);
+	//rooms[id].kickTimer = setTimeout(rooms[id].formKickInactive, 120000);
 	try{
-		AI.chooseMove(rooms[id], actions);
+		//AI.chooseMove(rooms[id], actions);
 	}catch(e){console.log(e)}
 }
+function ChooseTeamPreview(actions, room, callback){
+	AI.chooseTeamPreview();
+}
+
 function s()
 {
 	if (!stopvar)
@@ -2047,7 +2017,7 @@ var stopvar = false;
 function stop() {stopvar = true;}
 var hardcoded = false;
 var silent = false;
-var format = 'ou'//'randombattle';//'challengecup1vs1';
+var format = 'ou'
 var AI;
 var teamfile = 'team.dat'
 for (argi = process.argv.indexOf('test') + 1; argi < process.argv.length; argi++)
@@ -2088,6 +2058,7 @@ for (argi = process.argv.indexOf('test') + 1; argi < process.argv.length; argi++
 	}
 }
 if (!AI) AI = require('./uctAI.js');
+AI.format = format;
 teams.push(
 	{
 	name: "Default",

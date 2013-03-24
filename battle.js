@@ -1,8 +1,4 @@
-var $ = require('jquery');
-var ToolsMod = require('./Tools.js');
-var Tools = ToolsMod.Tools;
-var sanitize = ToolsMod.sanitize;
-var toId = ToolsMod.toId;
+
 function logfunc(msg){
 	console.log(msg);
 }
@@ -3162,9 +3158,7 @@ function Battle(frame, logFrame, noPreload) {
 			return;
 		}
 		self.activityQueueActive = true;
-		self.animationDelay = 0;
 		while (true) {
-			self.activityAnimations = $();
 			if (self.activityStep == self.activityQueue.length) {
 				self.activityQueueActive = false;
 				self.paused = true;
@@ -3182,9 +3176,8 @@ function Battle(frame, logFrame, noPreload) {
 			if (self.activityDelay) {
 				self.activityDelay = 0;
 			}
-			if (self.activityAnimations.length) break;
 		}
-		self.activityAnimations.promise().done(self.activeQueue);
+		self.activeQueue();
 	}
 
 	this.newBattle = function () {

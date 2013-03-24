@@ -1,8 +1,6 @@
-var ToolsMod = require('./Tools.js');
-var Tools = ToolsMod.Tools;
 var AITools = require('./AITools.js');
 var fs = require('fs');
-var $ = require('jquery');
+var myTeam = null;
 
 // Hack for undefined object.length
 Object.size = function(obj) {
@@ -12,6 +10,10 @@ Object.size = function(obj) {
     }
     return size;
 };
+
+function setTeam(team){
+	myTeam = team;
+}
 
 // Uses Pseudo-static member model.BitArrayMembers
 // If we start using bit arrays for anything but pokemon, we could overflow our int.
@@ -208,7 +210,7 @@ function maxVal(set){
 }
 
 // Runs just before next game. After add(Win/Lose)
-module.exports.postGame = function(){
+function postGame(){
 	if (!learn) return;
 
 	// firstStateAction can be null if we never leave the tree...
@@ -222,16 +224,16 @@ module.exports.postGame = function(){
 	firstStateAction = null;
 	cumulativeReward = 0;
 }
-module.exports.addWin = function(){
+function addWin(){
 	model.wins++;
 	cumulativeReward = 10;
 }
-module.exports.addLose = function(){
+function addLose(){
 	model.loses++;
 	cumulativeReward = -1;//-1;
 }
 
-module.exports.chooseMove = function(room, actions){	
+function chooseMove(room, actions){	
 	var c_c = 10; // expected horizon?
 	var currentstate = HashState(room.battle);
 	
@@ -284,7 +286,7 @@ module.exports.chooseMove = function(room, actions){
 	console.log();
 };
 
-module.exports.SaveState = function(){	
+function SaveState(){	
 	if (learn)
 	{
 		if (fs.existsSync(randomFile))
@@ -342,3 +344,9 @@ if (process.argv.length > 2){
 	}
 }
 
+module.exports.setTeam = setTeam;
+module.exports.SaveState = SaveState;
+module.exports.chooseMove = chooseMove;
+module.exports.addWin = addWin;
+module.exports.addLose = addLose;
+module.exports.postGame = postGame;
